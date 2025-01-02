@@ -1,0 +1,11 @@
+.git
+.gitignore
+README.md
+.github/
+.golangci.yml
+mise.toml
+examples/
+build/
+scripts/
+index.html
+**/*_test.go

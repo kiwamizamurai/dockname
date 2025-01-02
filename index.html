@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>dockname - Simple Label-based Reverse Proxy</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <style>
+        :root {
+            --primary: #1095c1;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .hero {
+            text-align: center;
+            padding: 4rem 0;
+            background: linear-gradient(45deg, #f3f4f6, #ffffff);
+        }
+        .badges {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin: 2rem 0;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin: 4rem 0;
+        }
+        .feature-card {
+            padding: 1.5rem;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .comparison-table {
+            margin: 2rem 0;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="hero">
+            <div class="container">
+                <h1>dockname</h1>
+                <p>A simple label-based reverse proxy that makes container routing effortless in development environments.</p>
+                <div class="badges">
+                    <a href="https://hub.docker.com/r/kiwamizamurai/dockname"><img src="https://img.shields.io/docker/v/kiwamizamurai/dockname?logo=docker" alt="Docker Hub"></a>
+                    <a href="https://github.com/kiwamizamurai/dockname/blob/main/LICENSE"><img src="https://img.shields.io/github/license/kiwamizamurai/dockname" alt="License"></a>
+                    <a href="https://goreportcard.com/report/github.com/kiwamizamurai/dockname"><img src="https://goreportcard.com/badge/github.com/kiwamizamurai/dockname" alt="Go Report Card"></a>
+                    <a href="https://hub.docker.com/r/kiwamizamurai/dockname"><img src="https://img.shields.io/badge/image%20size-10.9MB-blue" alt="Image Size"></a>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <section class="features">
+                <div class="feature-card">
+                    <h3>🎯 Simple Configuration</h3>
+                    <p>Label-based configuration makes setup a breeze</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🔄 Auto Discovery</h3>
+                    <p>Automatic container discovery and configuration</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🚀 Easy Setup</h3>
+                    <p>Works with .localhost domains - no /etc/hosts editing required</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🛡️ Lightweight</h3>
+                    <p>Tiny footprint optimized for development environments</p>
+                </div>
+            </section>
+
+            <section>
+                <h2>Size Comparison</h2>
+                <div class="comparison-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Solution</th>
+                                <th>Image Size</th>
+                                <th>Relative Size</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>dockname</td>
+                                <td>10.9MB</td>
+                                <td>1x (Base)</td>
+                            </tr>
+                            <tr>
+                                <td>Traefik</td>
+                                <td>185MB</td>
+                                <td>17x larger</td>
+                            </tr>
+                            <tr>
+                                <td>Nginx Proxy Manager</td>
+                                <td>1.09GB</td>
+                                <td>100x larger</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section>
+                <h2>Quick Start</h2>
+                <pre><code>services:
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    user: root
+    restart: always
+
+  web:
+    image: nginx:latest
+    labels:
+      - "dockname.domain=web.localhost"
+      - "dockname.port=80"</code></pre>
+                <p>Launch with:</p>
+                <pre><code>docker compose up -d</code></pre>
+                <p>Visit <code>http://web.localhost</code> in your browser!</p>
+            </section>
+
+            <section>
+                <h2>Label Configuration</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Label</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>dockname.domain</code></td>
+                            <td>Access domain</td>
+                            <td><code>web.localhost</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>dockname.port</code></td>
+                            <td>Container port (default: 80)</td>
+                            <td><code>80</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+        </div>
+    </main>
+
+    <footer class="container">
+        <p>MIT License - See <a href="https://github.com/kiwamizamurai/dockname/blob/main/LICENSE">LICENSE</a> file for details.</p>
+    </footer>
+</body>
+</html> 
