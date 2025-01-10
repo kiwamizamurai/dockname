@@ -1,33 +1,32 @@
-# dockname
+# DockName
 
 [![Docker Hub](https://img.shields.io/docker/v/kiwamizamurai/dockname?logo=docker)](https://hub.docker.com/r/kiwamizamurai/dockname)
 [![License](https://img.shields.io/github/license/kiwamizamurai/dockname)](https://github.com/kiwamizamurai/dockname/blob/main/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/kiwamizamurai/dockname)](https://goreportcard.com/report/github.com/kiwamizamurai/dockname)
 [![Image Size](https://img.shields.io/badge/image%20size-10.9MB-blue)](https://hub.docker.com/r/kiwamizamurai/dockname)
 
-dockname is a simple label-based reverse proxy that makes container routing effortless in development environments. It serves as a lightweight alternative to other reverse proxies, offering simpler configuration with a tiny footprint.
+DockName is a zero-config reverse proxy that makes container routing effortless in development environments. It automatically detects your containers and makes them accessible via `.localhost` domains based on their service names.
 
 | Solution | Image Size | Relative Size |
 |----------|------------|---------------|
-| **dockname** | **10.9MB** | **1x (Base)** |
+| **DockName** | **10.9MB** | **1x (Base)** |
 | Traefik | 185MB | 17x larger |
 | Nginx Proxy Manager | 1.09GB | 100x larger |
 
 ## Features
 
-- 🎯 Simple label-based configuration
-- 🔄 Automatic container discovery and configuration
-- 🚀 Easy setup with `.localhosthost` domains (no `/etc/hosts` editing required)
-- 🛡️ Lightweight design optimized for development environments
+- 🎯 Zero configuration required - just add the proxy service
+- 🎯 Automatic service discovery and routing
+- 🔄 Real-time container detection
+- 🌐 Automatic `.localhost` domain generation
+- 🛡️ Lightweight design optimized for development
 
 ## Quick Start
 
 ```yaml
 services:
   proxy:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: kiwamizamurai/dockname
     ports:
       - "80:80"
     volumes:
@@ -37,9 +36,9 @@ services:
 
   web:
     image: nginx:latest
-    labels:
-      - "dockname.domain=web.localhost"  # Access domain
-      - "dockname.port=80"               # Container port
+    ports:
+      - "3000:80"
+    # That's it! Automatically accessible at http://web.localhost
 ```
 
 Launch:
@@ -47,25 +46,26 @@ Launch:
 docker compose up -d
 ```
 
-Simply visit http://web.localhost in your browser!
+Your services are instantly accessible:
+- `http://web.localhost` -> nginx container
+- etc...
 
 ## How It Works
 
-1. DNS Level:
-   - `.localhost` domains automatically resolve to `127.0.0.1`
-   - No need to edit `/etc/hosts`
+1. **Automatic Service Discovery**:
+   - DockName detects your running containers
+   - Uses service names from Docker Compose
+   - Automatically finds exposed ports
 
-2. dockname Proxy:
-   - Monitors Docker containers
-   - Label-based routing configuration
-   - Forwards requests to appropriate containers
+2. **Smart Domain Generation**:
+   - Creates domains based on service names
+   - Example: `web` service -> `web.localhost`
+   - No `/etc/hosts` editing needed
 
-## Label Configuration
-
-| Label | Description | Example |
-|--------|------------|---------|
-| `dockname.domain` | Access domain | `web.localhosthost` |
-| `dockname.port` | Container port (default: 80) | `80` |
+3. **Port Detection**:
+   - Automatically detects container ports
+   - Uses first exposed port by default
+   - Supports both published and internal ports
 
 ## License
 
