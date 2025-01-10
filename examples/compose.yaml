@@ -10,9 +10,55 @@ services:
     user: root
     restart: always
 
+  # Example web service - automatically accessible at http://web.localhost
   web:
     image: nginx:latest
-    container_name: web
+    ports:
+      - "4000:80"
     labels:
-      - "dockname.domain=web.localhost"
       - "dockname.port=80"
+
+  # Example DB service - automatically accessible at http://db.localhost
+  db:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+
+  # Example DB management UI - automatically accessible at http://dbadmin.localhost
+  dbadmin:
+    image: dpage/pgadmin4:latest
+    ports:
+      - "8080:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+
+  # Example message queue with UI - automatically accessible at http://queue.localhost
+  queue:
+    image: rabbitmq:management
+    ports:
+      - "15672:15672" # Management UI port
+      - "5672:5672"   # AMQP protocol port
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  # Example custom Express.js app - automatically accessible at http://app.localhost
+  app:
+    image: node:18-alpine
+    ports:
+      - "3000:3000"
+    working_dir: /app
+    labels:
+      - "dockname.port=3000"
+    command: sh -c "npm install express && node -e \"
+      const express = require('express');
+      const app = express();
+      app.get('/', (req, res) => res.send('Hello from Express!'));
+      app.listen(3000, '0.0.0.0', () => console.log('Server running on port 3000'));
+      \""
