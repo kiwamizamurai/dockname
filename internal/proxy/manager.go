@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
+	dockerevents "github.com/docker/docker/api/types/events"
 	"github.com/kiwamizamurai/dockname/internal/container"
 	"github.com/kiwamizamurai/dockname/internal/events"
 	"github.com/kiwamizamurai/dockname/internal/proxy/handler"
@@ -46,14 +47,21 @@ func NewManager(containerManager container.Manager, config *Config, logger zerol
 
 	eventManager := events.NewManager(logger)
 	proxyHandler := handler.NewProxyHandler(logger)
-
-	return &Manager{
+	manager := &Manager{
 		containerManager: containerManager,
 		eventManager:     eventManager,
 		proxyHandler:     proxyHandler,
 		config:           config,
 		logger:           logger,
 	}
+
+	// Register event handlers
+	eventManager.RegisterHandler(events.EventStart, manager)
+	eventManager.RegisterHandler(events.EventStop, manager)
+	eventManager.RegisterHandler(events.EventDie, manager)
+	eventManager.RegisterHandler(events.EventKill, manager)
+
+	return manager
 }
 
 func (m *Manager) Start(ctx context.Context) error {
@@ -107,77 +115,113 @@ func (m *Manager) watchContainers(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil
+		case err := <-errChan:
+			return fmt.Errorf("container events error: %w", err)
 		case event := <-eventsChan:
-			if event.Type != "container" {
-				continue
-			}
-
 			if err := m.eventManager.HandleEvent(ctx, event); err != nil {
 				m.logger.Error().Err(err).
-					Str("container_id", event.ID).
-					Str("action", event.Action).
-					Msg("failed to handle container event")
-			}
-		case err := <-errChan:
-			if err != nil {
-				m.logger.Error().Err(err).Msg("error monitoring events")
-				return fmt.Errorf("error monitoring events: %w", err)
+					Str("event_action", event.Action).
+					Str("event_id", event.ID).
+					Msg("Failed to handle container event")
 			}
 		}
 	}
 }
 
 func (m *Manager) registerContainer(ctx context.Context, container types.Container) error {
-	domain, ok := container.Labels["dockname.domain"]
-	if !ok {
-		m.logger.Info().
-			Str("container_id", container.ID).
-			Interface("labels", container.Labels).
-			Msg("dockname.domain label not found, skipping container")
+	m.logger.Debug().
+		Str("container_id", container.ID).
+		Interface("labels", container.Labels).
+		Msg("Registering container")
+
+	containerInfo, err := m.containerManager.GetContainerInfo(ctx, container)
+	if err != nil {
+		return fmt.Errorf("failed to get container info: %w", err)
+	}
+
+	// Add detailed debug logging
+	m.logger.Debug().
+		Str("container_id", containerInfo.ID).
+		Str("service_name", containerInfo.ServiceName).
+		Int("target_port", containerInfo.TargetPort).
+		Str("ip_address", containerInfo.IPAddress).
+		Msg("Container info retrieved")
+
+	// Skip if no service name or target port
+	if containerInfo.ServiceName == "" || containerInfo.TargetPort == 0 {
+		m.logger.Debug().
+			Str("container_id", containerInfo.ID).
+			Str("service_name", containerInfo.ServiceName).
+			Int("target_port", containerInfo.TargetPort).
+			Msg("Skipping container registration: missing service name or target port")
 		return nil
 	}
 
-	port := container.Labels["dockname.port"]
-	if port == "" {
-		port = "80" // Default port
-	}
+	// Create domain from service name
+	domain := fmt.Sprintf("%s.localhost", containerInfo.ServiceName)
 
-	containerJSON, err := m.containerManager.InspectContainer(ctx, container.ID)
+	// Create target URL
+	targetURL := fmt.Sprintf("http://%s:%d", containerInfo.IPAddress, containerInfo.TargetPort)
+	proxyURL, err := url.Parse(targetURL)
 	if err != nil {
-		return fmt.Errorf("failed to inspect container: %w", err)
+		return fmt.Errorf("failed to parse target URL: %w", err)
 	}
 
-	var containerIP string
-	for networkName, network := range containerJSON.NetworkSettings.Networks {
-		if network.IPAddress != "" {
-			containerIP = network.IPAddress
-			m.logger.Info().
-				Str("container_id", container.ID).
-				Str("network", networkName).
-				Str("ip", containerIP).
-				Msg("Got container IP address")
-			break
-		}
+	// Create reverse proxy
+	proxy := httputil.NewSingleHostReverseProxy(proxyURL)
+	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
+		m.logger.Error().Err(err).
+			Str("domain", domain).
+			Str("target", targetURL).
+			Msg("Proxy error")
+		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 	}
 
-	if containerIP == "" {
-		return fmt.Errorf("container IP address not found: %s", container.ID)
-	}
-
-	targetURL, err := url.Parse(fmt.Sprintf("http://%s:%s", containerIP, port))
-	if err != nil {
-		return fmt.Errorf("failed to parse URL: %w", err)
-	}
-
-	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	m.proxyHandler.AddRoute(domain, proxy)
-
 	m.logger.Info().
-		Str("container_id", container.ID).
 		Str("domain", domain).
-		Str("target", targetURL.String()).
-		Msg("Registered container")
+		Str("target", targetURL).
+		Str("service_name", containerInfo.ServiceName).
+		Int("target_port", containerInfo.TargetPort).
+		Str("container_id", containerInfo.ID).
+		Msg("Registered container route")
 
+	return nil
+}
+
+// HandleEvent implements events.Handler interface
+func (m *Manager) HandleEvent(ctx context.Context, event dockerevents.Message) error {
+	if event.Type != "container" {
+		return nil
+	}
+
+	container := types.Container{
+		ID:     event.Actor.ID,
+		Labels: event.Actor.Attributes,
+	}
+
+	switch events.EventType(event.Action) {
+	case events.EventStart:
+		if err := m.registerContainer(ctx, container); err != nil {
+			m.logger.Error().Err(err).
+				Str("container_id", container.ID).
+				Msg("Failed to register container")
+			return err
+		}
+	case events.EventStop, events.EventDie, events.EventKill:
+		containerInfo, err := m.containerManager.GetContainerInfo(ctx, container)
+		if err != nil {
+			m.logger.Error().Err(err).
+				Str("container_id", container.ID).
+				Msg("Failed to get container info for removal")
+			return err
+		}
+		domain := fmt.Sprintf("%s.localhost", containerInfo.ServiceName)
+		m.proxyHandler.RemoveRoute(domain)
+		m.logger.Info().
+			Str("domain", domain).
+			Msg("Removed container route")
+	}
 	return nil
 }

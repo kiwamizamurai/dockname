@@ -8,7 +8,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/events"
-	"github.com/docker/docker/api/types/network"
+	containerTypes "github.com/kiwamizamurai/dockname/internal/container"
 	"github.com/rs/zerolog"
 )
 
@@ -16,6 +16,7 @@ type mockManager struct {
 	ListContainersFn   func(ctx context.Context) ([]types.Container, error)
 	InspectContainerFn func(ctx context.Context, containerID string) (types.ContainerJSON, error)
 	WatchEventsFn      func(ctx context.Context) (<-chan events.Message, <-chan error)
+	GetContainerInfoFn func(ctx context.Context, container types.Container) (*containerTypes.Info, error)
 }
 
 func (m *mockManager) ListContainers(ctx context.Context) ([]types.Container, error) {
@@ -43,20 +44,27 @@ func (m *mockManager) WatchEvents(ctx context.Context) (<-chan events.Message, <
 	return msgChan, errChan
 }
 
+func (m *mockManager) GetContainerInfo(ctx context.Context, container types.Container) (*containerTypes.Info, error) {
+	if m.GetContainerInfoFn != nil {
+		return m.GetContainerInfoFn(ctx, container)
+	}
+	return nil, nil
+}
+
 func TestManager_Start(t *testing.T) {
 	testContainers := []types.Container{
 		{
-			ID: "container1",
-			Labels: map[string]string{
-				"dockname.domain": "test1.example.com",
-				"dockname.port":   "8080",
+			ID:    "container1",
+			Names: []string{"/web"},
+			Ports: []types.Port{
+				{PrivatePort: 8080},
 			},
 		},
 		{
-			ID: "container2",
-			Labels: map[string]string{
-				"dockname.domain": "test2.example.com",
-				"dockname.port":   "8081",
+			ID:    "container2",
+			Names: []string{"/api"},
+			Ports: []types.Port{
+				{PrivatePort: 8081},
 			},
 		},
 	}
@@ -65,15 +73,26 @@ func TestManager_Start(t *testing.T) {
 		ListContainersFn: func(_ context.Context) ([]types.Container, error) {
 			return testContainers, nil
 		},
-		InspectContainerFn: func(_ context.Context, _ string) (types.ContainerJSON, error) {
-			return types.ContainerJSON{
-				NetworkSettings: &types.NetworkSettings{
-					Networks: map[string]*network.EndpointSettings{
-						"bridge": {
-							IPAddress: "172.17.0.2",
-						},
-					},
-				},
+		GetContainerInfoFn: func(_ context.Context, container types.Container) (*containerTypes.Info, error) {
+			// Extract service name from container name
+			var serviceName string
+			if len(container.Names) > 0 {
+				serviceName = container.Names[0][1:] // Remove leading slash
+			} else if container.ID == "container3" {
+				serviceName = "app"
+			}
+
+			var targetPort uint16 = 8080
+			if len(container.Ports) > 0 {
+				targetPort = container.Ports[0].PrivatePort
+			}
+
+			return &containerTypes.Info{
+				ID:          container.ID,
+				Name:        serviceName,
+				ServiceName: serviceName,
+				TargetPort:  int(targetPort),
+				IPAddress:   "172.17.0.2",
 			}, nil
 		},
 		WatchEventsFn: func(ctx context.Context) (<-chan events.Message, <-chan error) {
@@ -92,6 +111,12 @@ func TestManager_Start(t *testing.T) {
 					Type:   "container",
 					Action: "start",
 					ID:     "container3",
+					Actor: events.Actor{
+						ID: "container3",
+						Attributes: map[string]string{
+							"name": "app",
+						},
+					},
 				}:
 				case <-time.After(100 * time.Millisecond):
 					return
@@ -136,10 +161,10 @@ func TestManager_initializeContainers(t *testing.T) {
 			name: "Success: Containers initialize correctly",
 			containers: []types.Container{
 				{
-					ID: "container1",
-					Labels: map[string]string{
-						"dockname.domain": "test.example.com",
-						"dockname.port":   "8080",
+					ID:    "container1",
+					Names: []string{"/web"},
+					Ports: []types.Port{
+						{PrivatePort: 8080},
 					},
 				},
 			},
@@ -147,23 +172,21 @@ func TestManager_initializeContainers(t *testing.T) {
 				m.ListContainersFn = func(_ context.Context) ([]types.Container, error) {
 					return []types.Container{
 						{
-							ID: "container1",
-							Labels: map[string]string{
-								"dockname.domain": "test.example.com",
-								"dockname.port":   "8080",
+							ID:    "container1",
+							Names: []string{"/web"},
+							Ports: []types.Port{
+								{PrivatePort: 8080},
 							},
 						},
 					}, nil
 				}
-				m.InspectContainerFn = func(_ context.Context, _ string) (types.ContainerJSON, error) {
-					return types.ContainerJSON{
-						NetworkSettings: &types.NetworkSettings{
-							Networks: map[string]*network.EndpointSettings{
-								"bridge": {
-									IPAddress: "172.17.0.2",
-								},
-							},
-						},
+				m.GetContainerInfoFn = func(_ context.Context, container types.Container) (*containerTypes.Info, error) {
+					return &containerTypes.Info{
+						ID:          container.ID,
+						Name:        container.Names[0],
+						ServiceName: "web",
+						TargetPort:  8080,
+						IPAddress:   "172.17.0.2",
 					}, nil
 				}
 			},
@@ -173,10 +196,10 @@ func TestManager_initializeContainers(t *testing.T) {
 			name: "Error: Container inspection fails",
 			containers: []types.Container{
 				{
-					ID: "container1",
-					Labels: map[string]string{
-						"dockname.domain": "test.example.com",
-						"dockname.port":   "8080",
+					ID:    "container1",
+					Names: []string{"/web"},
+					Ports: []types.Port{
+						{PrivatePort: 8080},
 					},
 				},
 			},
@@ -184,16 +207,16 @@ func TestManager_initializeContainers(t *testing.T) {
 				m.ListContainersFn = func(_ context.Context) ([]types.Container, error) {
 					return []types.Container{
 						{
-							ID: "container1",
-							Labels: map[string]string{
-								"dockname.domain": "test.example.com",
-								"dockname.port":   "8080",
+							ID:    "container1",
+							Names: []string{"/web"},
+							Ports: []types.Port{
+								{PrivatePort: 8080},
 							},
 						},
 					}, nil
 				}
-				m.InspectContainerFn = func(_ context.Context, _ string) (types.ContainerJSON, error) {
-					return types.ContainerJSON{}, errors.New("inspect error")
+				m.GetContainerInfoFn = func(_ context.Context, _ types.Container) (*containerTypes.Info, error) {
+					return nil, errors.New("inspect error")
 				}
 			},
 			wantErr: true,
