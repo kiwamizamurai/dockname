@@ -8,13 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial release of dockname
-- Basic Docker container management functionality
-- Container proxy and event handling system
-- Web interface for container management
-- Docker Compose support
+- 🎯 Zero-configuration automatic service discovery and routing
+- 🌐 Smart domain generation based on service names (`.localhost` domains)
+- 🔄 Real-time container detection and monitoring
+- 🛡️ Lightweight design optimized for development
+- Automatic port detection from container configuration
+  - Support for both published and internal ports
+  - First exposed port detection by default
+- Docker Compose integration with simplified setup
 - CI/CD pipeline with GitHub Actions
-- Documentation and examples
+- Comprehensive documentation and examples
 
 ### Changed
 - N/A

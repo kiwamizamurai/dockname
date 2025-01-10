@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>dockname - Simple Label-based Reverse Proxy</title>
+    <title>DockName - Zero-Config Reverse Proxy</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
     <style>
         :root {
@@ -46,14 +46,29 @@
             border-radius: 8px;
             overflow-x: auto;
         }
+        .how-it-works {
+            margin: 4rem 0;
+        }
+        .how-it-works-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+        .step-card {
+            padding: 1.5rem;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body>
     <main>
         <div class="hero">
             <div class="container">
-                <h1>dockname</h1>
-                <p>A simple label-based reverse proxy that makes container routing effortless in development environments.</p>
+                <h1>DockName</h1>
+                <p>A zero-config reverse proxy that makes container routing effortless in development environments. Automatically detects your containers and makes them accessible via .localhost domains.</p>
                 <div class="badges">
                     <a href="https://hub.docker.com/r/kiwamizamurai/dockname"><img src="https://img.shields.io/docker/v/kiwamizamurai/dockname?logo=docker" alt="Docker Hub"></a>
                     <a href="https://github.com/kiwamizamurai/dockname/blob/main/LICENSE"><img src="https://img.shields.io/github/license/kiwamizamurai/dockname" alt="License"></a>
@@ -66,16 +81,16 @@
         <div class="container">
             <section class="features">
                 <div class="feature-card">
-                    <h3>🎯 Simple Configuration</h3>
-                    <p>Label-based configuration makes setup a breeze</p>
+                    <h3>🎯 Zero Config</h3>
+                    <p>No configuration needed - just add the proxy service</p>
                 </div>
                 <div class="feature-card">
                     <h3>🔄 Auto Discovery</h3>
-                    <p>Automatic container discovery and configuration</p>
+                    <p>Automatic container detection and domain generation</p>
                 </div>
                 <div class="feature-card">
-                    <h3>🚀 Easy Setup</h3>
-                    <p>Works with .localhost domains - no /etc/hosts editing required</p>
+                    <h3>🚀 Smart Routing</h3>
+                    <p>Intelligent port detection and service mapping</p>
                 </div>
                 <div class="feature-card">
                     <h3>🛡️ Lightweight</h3>
@@ -96,7 +111,7 @@
                         </thead>
                         <tbody>
                             <tr>
-                                <td>dockname</td>
+                                <td>DockName</td>
                                 <td>10.9MB</td>
                                 <td>1x (Base)</td>
                             </tr>
@@ -115,13 +130,29 @@
                 </div>
             </section>
 
+            <section class="how-it-works">
+                <h2>How It Works</h2>
+                <div class="how-it-works-grid">
+                    <div class="step-card">
+                        <h3>1. Service Discovery</h3>
+                        <p>DockName automatically detects your running containers and their configurations.</p>
+                    </div>
+                    <div class="step-card">
+                        <h3>2. Domain Generation</h3>
+                        <p>Creates .localhost domains based on your service names (e.g., web → web.localhost).</p>
+                    </div>
+                    <div class="step-card">
+                        <h3>3. Port Detection</h3>
+                        <p>Intelligently detects and maps container ports for seamless routing.</p>
+                    </div>
+                </div>
+            </section>
+
             <section>
                 <h2>Quick Start</h2>
                 <pre><code>services:
   proxy:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: kiwamizamurai/dockname
     ports:
       - "80:80"
     volumes:
@@ -129,39 +160,43 @@
     user: root
     restart: always
 
+  # Example web service
   web:
     image: nginx:latest
+    ports:
+      - "4000:80"
     labels:
-      - "dockname.domain=web.localhost"
-      - "dockname.port=80"</code></pre>
+      - "dockname.port=80"
+    # -> http://web.localhost
+
+  # Example database service
+  db:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    # -> http://db.localhost
+
+  # Example database management UI
+  dbadmin:
+    image: dpage/pgadmin4:latest
+    ports:
+      - "8080:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    # -> http://dbadmin.localhost</code></pre>
                 <p>Launch with:</p>
                 <pre><code>docker compose up -d</code></pre>
-                <p>Visit <code>http://web.localhost</code> in your browser!</p>
-            </section>
-
-            <section>
-                <h2>Label Configuration</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Label</th>
-                            <th>Description</th>
-                            <th>Example</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><code>dockname.domain</code></td>
-                            <td>Access domain</td>
-                            <td><code>web.localhost</code></td>
-                        </tr>
-                        <tr>
-                            <td><code>dockname.port</code></td>
-                            <td>Container port (default: 80)</td>
-                            <td><code>80</code></td>
-                        </tr>
-                    </tbody>
-                </table>
+                <p>Your services are instantly accessible via their .localhost domains:</p>
+                <ul>
+                    <li>http://web.localhost - Nginx web server</li>
+                    <li>http://db.localhost - PostgreSQL database</li>
+                    <li>http://dbadmin.localhost - pgAdmin database management</li>
+                </ul>
             </section>
         </div>
     </main>
